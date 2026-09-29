@@ -19,6 +19,10 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     private static final String LINK_PATH_PREFIX = LINKS_PATH + "/";
     private static final String USERS_PATH = "/internal/users";
     private static final String STATUS_PATH = "/v0/status";
+    private static final String GET_METHOD = "GET";
+    private static final String POST_METHOD = "POST";
+    private static final String PUT_METHOD = "PUT";
+    private static final String DELETE_METHOD = "DELETE";
 
     private final int port;
     private final PersistentStringDao links;
@@ -84,16 +88,16 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     }
 
     private void handleStatus(HttpExchange exchange, String method) throws IOException {
-        if (!"GET".equals(method)) {
-            sendMethodNotAllowed(exchange, "GET");
+        if (!GET_METHOD.equals(method)) {
+            sendMethodNotAllowed(exchange, GET_METHOD);
             return;
         }
         sendEmpty(exchange, links.isAvailable() && authentication.isAvailable() ? 200 : 503);
     }
 
     private void handleUsers(HttpExchange exchange, String method) throws IOException {
-        if (!"POST".equals(method)) {
-            sendMethodNotAllowed(exchange, "POST");
+        if (!POST_METHOD.equals(method)) {
+            sendMethodNotAllowed(exchange, POST_METHOD);
             return;
         }
         if (!hasTextContentType(exchange)) {
@@ -106,8 +110,8 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     }
 
     private void handleLinkCollection(HttpExchange exchange, String method) throws IOException {
-        if (!"POST".equals(method)) {
-            sendMethodNotAllowed(exchange, "POST");
+        if (!POST_METHOD.equals(method)) {
+            sendMethodNotAllowed(exchange, POST_METHOD);
             return;
         }
         if (!hasTextContentType(exchange)) {
@@ -123,9 +127,9 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     private void handleLink(HttpExchange exchange, String method, String id) throws IOException {
         HttpUtils.validateId(id);
         switch (method) {
-            case "GET" -> HttpUtils.sendText(exchange, 200, links.get(id));
-            case "PUT" -> updateLink(exchange, id);
-            case "DELETE" -> deleteLink(exchange, id);
+            case GET_METHOD -> HttpUtils.sendText(exchange, 200, links.get(id));
+            case PUT_METHOD -> updateLink(exchange, id);
+            case DELETE_METHOD -> deleteLink(exchange, id);
             default -> sendMethodNotAllowed(exchange, "GET, PUT, DELETE");
         }
     }
@@ -148,8 +152,8 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     }
 
     private void handleRedirect(HttpExchange exchange, String method, String path) throws IOException {
-        if (!"GET".equals(method)) {
-            sendMethodNotAllowed(exchange, "GET");
+        if (!GET_METHOD.equals(method)) {
+            sendMethodNotAllowed(exchange, GET_METHOD);
             return;
         }
         if (path.length() <= 1 || path.charAt(0) != '/') {
