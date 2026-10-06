@@ -21,6 +21,8 @@ final class KVServiceImpl implements KVService {
     private static final String GET_METHOD = "GET";
     private static final String PUT_METHOD = "PUT";
     private static final String DELETE_METHOD = "DELETE";
+    private static final String ID_PARAMETER = "id";
+    private static final char PARAMETER_SEPARATOR = '=';
 
     private final PersistentByteArrayDao dao;
     private final HttpServer server;
@@ -128,8 +130,8 @@ final class KVServiceImpl implements KVService {
             throw new IllegalArgumentException("Missing id");
         }
         for (String parameter : rawQuery.split("&")) {
-            int separator = parameter.indexOf('=');
-            if (separator >= 0 && "id".equals(parameter.substring(0, separator))) {
+            int separator = parameter.indexOf(PARAMETER_SEPARATOR);
+            if (separator >= 0 && ID_PARAMETER.equals(parameter.substring(0, separator))) {
                 String key = URLDecoder.decode(parameter.substring(separator + 1), StandardCharsets.UTF_8);
                 if (!key.isEmpty()) {
                     return key;

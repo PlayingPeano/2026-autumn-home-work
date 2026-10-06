@@ -14,6 +14,10 @@ import java.util.NoSuchElementException;
 
 final class RemoteStringDao implements Dao<String> {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
+    private static final int STATUS_OK = 200;
+    private static final int STATUS_CREATED = 201;
+    private static final int STATUS_ACCEPTED = 202;
+    private static final int STATUS_NOT_FOUND = 404;
 
     private final HttpClient client = HttpClient.newBuilder()
         .connectTimeout(REQUEST_TIMEOUT)
@@ -31,10 +35,10 @@ final class RemoteStringDao implements Dao<String> {
             .timeout(REQUEST_TIMEOUT)
             .build();
         HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
-        if (response.statusCode() == 200) {
+        if (response.statusCode() == STATUS_OK) {
             return new String(response.body(), StandardCharsets.UTF_8);
         }
-        if (response.statusCode() == 404) {
+        if (response.statusCode() == STATUS_NOT_FOUND) {
             throw new NoSuchElementException("No value for key: " + key);
         }
         throw unexpectedStatus(response.statusCode());
@@ -47,7 +51,7 @@ final class RemoteStringDao implements Dao<String> {
             .timeout(REQUEST_TIMEOUT)
             .build();
         HttpResponse<Void> response = send(request, HttpResponse.BodyHandlers.discarding());
-        if (response.statusCode() != 201) {
+        if (response.statusCode() != STATUS_CREATED) {
             throw unexpectedStatus(response.statusCode());
         }
     }
@@ -59,7 +63,7 @@ final class RemoteStringDao implements Dao<String> {
             .timeout(REQUEST_TIMEOUT)
             .build();
         HttpResponse<Void> response = send(request, HttpResponse.BodyHandlers.discarding());
-        if (response.statusCode() != 202) {
+        if (response.statusCode() != STATUS_ACCEPTED) {
             throw unexpectedStatus(response.statusCode());
         }
     }

@@ -31,6 +31,7 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     private final BasicAuthenticator authentication;
     private final HttpServer server;
     private final SecureRandom random = new SecureRandom();
+    private final Object lifecycleLock = new Object();
     private boolean lifecycleStarted;
 
     UrlShortenerServiceImpl(int port, PersistentStringDao links, PersistentStringDao users) throws IOException {
@@ -42,32 +43,38 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     }
 
     @Override
-    public synchronized void start() {
-        lifecycleStarted = true;
-        server.start();
-    }
-
-    @Override
-    public synchronized void stop() {
-        lifecycleStarted = true;
-        Dao<String> linksToClose = links;
-        try (linksToClose; authentication) {
-            server.stop(0);
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Cannot close links DAO", exception);
+    public void start() {
+        synchronized (lifecycleLock) {
+            lifecycleStarted = true;
+            server.start();
         }
     }
 
     @Override
-    public synchronized void setLinksDao(Dao<String> dao) {
-        if (lifecycleStarted) {
-            throw new IllegalStateException("Links DAO can only be set before service start");
+    public void stop() {
+        synchronized (lifecycleLock) {
+            lifecycleStarted = true;
+            Dao<String> linksToClose = links;
+            try (linksToClose; authentication) {
+                server.stop(0);
+            } catch (IOException exception) {
+                throw new UncheckedIOException("Cannot close links DAO", exception);
+            }
         }
-        Dao<String> previous = links;
-        try (previous) {
-            links = dao;
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Cannot close previous links DAO", exception);
+    }
+
+    @Override
+    public void setLinksDao(Dao<String> dao) {
+        synchronized (lifecycleLock) {
+            if (lifecycleStarted) {
+                throw new IllegalStateException("Links DAO can only be set before service start");
+            }
+            Dao<String> previous = links;
+            try (previous) {
+                links = dao;
+            } catch (IOException exception) {
+                throw new UncheckedIOException("Cannot close previous links DAO", exception);
+            }
         }
     }
 
