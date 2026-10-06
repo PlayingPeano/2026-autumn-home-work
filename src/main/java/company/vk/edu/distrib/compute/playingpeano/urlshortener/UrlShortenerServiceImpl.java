@@ -2,9 +2,11 @@ package company.vk.edu.distrib.compute.playingpeano.urlshortener;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import company.vk.edu.distrib.compute.Dao;
 import company.vk.edu.distrib.compute.urlshortener.UrlShortenerService;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.NoSuchElementException;
@@ -25,10 +27,11 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     private static final String DELETE_METHOD = "DELETE";
 
     private final int port;
-    private final PersistentStringDao links;
+    private Dao<String> links;
     private final BasicAuthenticator authentication;
     private final HttpServer server;
     private final SecureRandom random = new SecureRandom();
+    private boolean lifecycleStarted;
 
     UrlShortenerServiceImpl(int port, PersistentStringDao links, PersistentStringDao users) throws IOException {
         this.port = port;
@@ -39,14 +42,32 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     }
 
     @Override
-    public void start() {
+    public synchronized void start() {
+        lifecycleStarted = true;
         server.start();
     }
 
     @Override
-    public void stop() {
-        try (links; authentication) {
+    public synchronized void stop() {
+        lifecycleStarted = true;
+        Dao<String> linksToClose = links;
+        try (linksToClose; authentication) {
             server.stop(0);
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Cannot close links DAO", exception);
+        }
+    }
+
+    @Override
+    public synchronized void setLinksDao(Dao<String> dao) {
+        if (lifecycleStarted) {
+            throw new IllegalStateException("Links DAO can only be set before service start");
+        }
+        Dao<String> previous = links;
+        try (previous) {
+            links = dao;
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Cannot close previous links DAO", exception);
         }
     }
 
@@ -92,7 +113,7 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
             sendMethodNotAllowed(exchange, GET_METHOD);
             return;
         }
-        sendEmpty(exchange, links.isAvailable() && authentication.isAvailable() ? 200 : 503);
+        sendEmpty(exchange, authentication.isAvailable() ? 200 : 503);
     }
 
     private void handleUsers(HttpExchange exchange, String method) throws IOException {
