@@ -10,6 +10,8 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.NoSuchElementException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static company.vk.edu.distrib.compute.playingpeano.urlshortener.HttpUtils.hasTextContentType;
 import static company.vk.edu.distrib.compute.playingpeano.urlshortener.HttpUtils.readBody;
@@ -31,7 +33,7 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     private final BasicAuthenticator authentication;
     private final HttpServer server;
     private final SecureRandom random = new SecureRandom();
-    private final Object lifecycleLock = new Object();
+    private final Lock lifecycleLock = new ReentrantLock();
     private boolean lifecycleStarted;
 
     UrlShortenerServiceImpl(int port, PersistentStringDao links, PersistentStringDao users) throws IOException {
@@ -44,15 +46,19 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
 
     @Override
     public void start() {
-        synchronized (lifecycleLock) {
+        lifecycleLock.lock();
+        try {
             lifecycleStarted = true;
             server.start();
+        } finally {
+            lifecycleLock.unlock();
         }
     }
 
     @Override
     public void stop() {
-        synchronized (lifecycleLock) {
+        lifecycleLock.lock();
+        try {
             lifecycleStarted = true;
             Dao<String> linksToClose = links;
             try (linksToClose; authentication) {
@@ -60,12 +66,15 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
             } catch (IOException exception) {
                 throw new UncheckedIOException("Cannot close links DAO", exception);
             }
+        } finally {
+            lifecycleLock.unlock();
         }
     }
 
     @Override
     public void setLinksDao(Dao<String> dao) {
-        synchronized (lifecycleLock) {
+        lifecycleLock.lock();
+        try {
             if (lifecycleStarted) {
                 throw new IllegalStateException("Links DAO can only be set before service start");
             }
@@ -75,6 +84,8 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
             } catch (IOException exception) {
                 throw new UncheckedIOException("Cannot close previous links DAO", exception);
             }
+        } finally {
+            lifecycleLock.unlock();
         }
     }
 
