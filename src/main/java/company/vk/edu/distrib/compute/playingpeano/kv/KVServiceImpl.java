@@ -23,6 +23,7 @@ final class KVServiceImpl implements KVService {
     private static final String DELETE_METHOD = "DELETE";
     private static final String ID_PARAMETER = "id";
     private static final char PARAMETER_SEPARATOR = '=';
+    private static final int PARAMETER_SEPARATOR_NOT_FOUND = -1;
 
     private final PersistentByteArrayDao dao;
     private final HttpServer server;
@@ -131,7 +132,8 @@ final class KVServiceImpl implements KVService {
         }
         for (String parameter : rawQuery.split("&")) {
             int separator = parameter.indexOf(PARAMETER_SEPARATOR);
-            if (separator >= 0 && ID_PARAMETER.equals(parameter.substring(0, separator))) {
+            if (separator != PARAMETER_SEPARATOR_NOT_FOUND
+                && ID_PARAMETER.equals(parameter.substring(0, separator))) {
                 String key = URLDecoder.decode(parameter.substring(separator + 1), StandardCharsets.UTF_8);
                 if (!key.isEmpty()) {
                     return key;
