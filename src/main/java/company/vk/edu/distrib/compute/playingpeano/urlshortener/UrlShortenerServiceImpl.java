@@ -27,6 +27,7 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
     private static final String POST_METHOD = "POST";
     private static final String PUT_METHOD = "PUT";
     private static final String DELETE_METHOD = "DELETE";
+    private static final int STOP_DELAY_SECONDS = 1;
 
     private final int port;
     private Dao<String> links;
@@ -62,7 +63,7 @@ final class UrlShortenerServiceImpl implements UrlShortenerService {
             lifecycleStarted = true;
             Dao<String> linksToClose = links;
             try (linksToClose; authentication) {
-                server.stop(0);
+                server.stop(STOP_DELAY_SECONDS);
             } catch (IOException exception) {
                 throw new UncheckedIOException("Cannot close links DAO", exception);
             }
