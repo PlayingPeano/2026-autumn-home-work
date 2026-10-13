@@ -24,6 +24,7 @@ final class KVServiceImpl implements KVService {
     private static final String ID_PARAMETER = "id";
     private static final char PARAMETER_SEPARATOR = '=';
     private static final int PARAMETER_SEPARATOR_NOT_FOUND = -1;
+    private static final int STOP_DELAY_SECONDS = 1;
 
     private final PersistentByteArrayDao dao;
     private final HttpServer server;
@@ -47,7 +48,7 @@ final class KVServiceImpl implements KVService {
     @Override
     public void stop() {
         try (dao) {
-            server.stop(0);
+            server.stop(STOP_DELAY_SECONDS);
             if (executor != null) {
                 executor.shutdown();
             }
