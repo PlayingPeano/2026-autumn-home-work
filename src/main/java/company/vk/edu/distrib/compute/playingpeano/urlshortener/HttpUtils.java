@@ -11,11 +11,21 @@ import java.security.SecureRandom;
 import org.jspecify.annotations.Nullable;
 
 final class HttpUtils {
+    private static final String HTTP_SCHEME = "http";
+    private static final String HTTPS_SCHEME = "https";
+    private static final String CONTENT_TYPE_HEADER = "Content-Type";
     private static final String TEXT_CONTENT_TYPE = "text/html; charset=utf-8";
+    private static final String AUTHENTICATE_HEADER = "WWW-Authenticate";
+    private static final String AUTHENTICATE_VALUE =
+        "Basic realm=\"url-shortener\", charset=\"UTF-8\"";
+    private static final String ALLOW_HEADER = "Allow";
     private static final String ID_ALPHABET =
         "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final int ID_LENGTH = 10;
     private static final int MAX_BODY_SIZE = 65_536;
+    private static final int MAX_PORT = 65_535;
+    private static final int STATUS_UNAUTHORIZED = 401;
+    private static final int STATUS_METHOD_NOT_ALLOWED = 405;
 
     private HttpUtils() {
     }
@@ -29,13 +39,13 @@ final class HttpUtils {
     }
 
     static boolean hasTextContentType(HttpExchange exchange) {
-        @Nullable String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        @Nullable String contentType = exchange.getRequestHeaders().getFirst(CONTENT_TYPE_HEADER);
         return contentType != null && TEXT_CONTENT_TYPE.equalsIgnoreCase(contentType.trim());
     }
 
     static void sendText(HttpExchange exchange, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", TEXT_CONTENT_TYPE);
+        exchange.getResponseHeaders().set(CONTENT_TYPE_HEADER, TEXT_CONTENT_TYPE);
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
     }
@@ -45,13 +55,13 @@ final class HttpUtils {
     }
 
     static void sendUnauthorized(HttpExchange exchange) throws IOException {
-        exchange.getResponseHeaders().set("WWW-Authenticate", "Basic realm=\"url-shortener\", charset=\"UTF-8\"");
-        sendEmpty(exchange, 401);
+        exchange.getResponseHeaders().set(AUTHENTICATE_HEADER, AUTHENTICATE_VALUE);
+        sendEmpty(exchange, STATUS_UNAUTHORIZED);
     }
 
     static void sendMethodNotAllowed(HttpExchange exchange, String allowedMethods) throws IOException {
-        exchange.getResponseHeaders().set("Allow", allowedMethods);
-        sendEmpty(exchange, 405);
+        exchange.getResponseHeaders().set(ALLOW_HEADER, allowedMethods);
+        sendEmpty(exchange, STATUS_METHOD_NOT_ALLOWED);
     }
 
     static String randomId(SecureRandom random) {
@@ -76,9 +86,9 @@ final class HttpUtils {
     static void validateLongLink(String longLink) {
         try {
             URI uri = new URI(longLink);
-            boolean supportedScheme = "http".equalsIgnoreCase(uri.getScheme())
-                || "https".equalsIgnoreCase(uri.getScheme());
-            if (!supportedScheme || uri.getHost() == null || uri.getPort() > 65_535) {
+            boolean supportedScheme = HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
+                || HTTPS_SCHEME.equalsIgnoreCase(uri.getScheme());
+            if (!supportedScheme || uri.getHost() == null || uri.getPort() > MAX_PORT) {
                 throw new IllegalArgumentException("Invalid HTTP link");
             }
         } catch (URISyntaxException exception) {
