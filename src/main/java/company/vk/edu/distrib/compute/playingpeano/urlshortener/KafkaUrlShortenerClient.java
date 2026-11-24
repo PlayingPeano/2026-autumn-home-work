@@ -41,7 +41,8 @@ final class KafkaUrlShortenerClient {
     private final String bootstrapServers;
     private final Dao<String> links;
     private final Lock linksLock;
-    private final BlockingQueue<LinkCreatedEvent> createdEvents = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
+    private final BlockingQueue<ProducerRecord<String, String>> createdEvents =
+        new LinkedBlockingQueue<>(QUEUE_CAPACITY);
     private final Thread worker;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
@@ -67,7 +68,12 @@ final class KafkaUrlShortenerClient {
     }
 
     void publishCreated(LinkCreatedEvent event) {
-        if (!createdEvents.offer(event)) {
+        ProducerRecord<String, String> record = new ProducerRecord<>(
+            LINKS_CREATED_TOPIC,
+            event.id(),
+            ModerationEventCodec.encodeCreated(event)
+        );
+        if (!createdEvents.offer(record) && LOGGER.isWarnEnabled()) {
             LOGGER.warn("Moderation queue is full for link {}", event.id());
         }
     }
@@ -92,24 +98,24 @@ final class KafkaUrlShortenerClient {
     private void publishQueuedEvents(KafkaProducer<String, String> producer) {
         int batchSize = Math.min(createdEvents.size(), EVENTS_PER_POLL);
         for (int index = 0; index < batchSize && running.get(); index++) {
-            @Nullable LinkCreatedEvent event = createdEvents.poll();
-            if (event == null) {
+            @Nullable ProducerRecord<String, String> record = createdEvents.poll();
+            if (record == null) {
                 return;
             }
-            ProducerRecord<String, String> record = new ProducerRecord<>(
-                LINKS_CREATED_TOPIC, event.id(), ModerationEventCodec.encodeCreated(event));
-            producer.send(record, (metadata, exception) -> handlePublishResult(event, exception));
+            producer.send(record, (metadata, exception) -> handlePublishResult(record, exception));
         }
     }
 
-    private void handlePublishResult(LinkCreatedEvent event, @Nullable Exception exception) {
+    private void handlePublishResult(ProducerRecord<String, String> record, @Nullable Exception exception) {
         if (exception == null || !running.get()) {
             return;
         }
-        if (exception instanceof RetriableException && createdEvents.offer(event)) {
+        if (exception instanceof RetriableException && createdEvents.offer(record)) {
             return;
         }
-        LOGGER.warn("Cannot publish moderation event for link {}", event.id(), exception);
+        if (LOGGER.isWarnEnabled()) {
+            LOGGER.warn("Cannot publish moderation event for link {}", record.key(), exception);
+        }
     }
 
     private void applyAndCommit(KafkaConsumer<String, String> consumer, ConsumerRecord<String, String> record) {
@@ -121,7 +127,9 @@ final class KafkaUrlShortenerClient {
         } catch (IllegalArgumentException exception) {
             LOGGER.warn("Ignoring malformed moderation result", exception);
         } catch (IOException exception) {
-            LOGGER.warn("Cannot remove rejected link {}", record.key(), exception);
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Cannot remove rejected link {}", record.key(), exception);
+            }
             consumer.seek(new TopicPartition(record.topic(), record.partition()), record.offset());
             return;
         }

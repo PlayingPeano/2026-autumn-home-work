@@ -5,10 +5,8 @@ import company.vk.edu.distrib.compute.moderation.ModerationService;
 import company.vk.edu.distrib.compute.moderation.ModerationServiceFactory;
 import company.vk.edu.distrib.compute.moderation.ModerationServiceFactoryTest;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Set;
@@ -28,13 +26,13 @@ public final class ModerationServiceFactoryImpl implements ModerationServiceFact
     }
 
     private Set<String> loadBannedWords() throws IOException {
-        InputStream resource = ModerationServiceFactoryImpl.class.getResourceAsStream(BANNED_WORDS_RESOURCE);
-        if (resource == null) {
-            throw new IOException("Cannot read banned words from " + BANNED_WORDS_RESOURCE);
-        }
-        try (resource;
-             BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
-            return reader.lines()
+        try (InputStream inputStream =
+                 ModerationServiceFactoryImpl.class.getResourceAsStream(BANNED_WORDS_RESOURCE)) {
+            if (inputStream == null) {
+                throw new IOException("Cannot read banned words from " + BANNED_WORDS_RESOURCE);
+            }
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                .lines()
                 .map(word -> word.toLowerCase(Locale.ROOT))
                 .filter(word -> !word.isBlank())
                 .collect(Collectors.toUnmodifiableSet());

@@ -8,6 +8,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -30,6 +32,7 @@ final class KafkaModerationService implements ModerationService {
     private static final Duration COMMIT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration STOP_TIMEOUT = Duration.ofSeconds(2);
 
+    private final Lock lifecycleLock = new ReentrantLock();
     private final String bootstrapServers;
     private final ModerationRecordProcessor processor;
     private final Thread worker;
@@ -43,22 +46,32 @@ final class KafkaModerationService implements ModerationService {
     }
 
     @Override
-    public synchronized void start() {
-        if (started) {
-            throw new IllegalStateException("Moderation service has already been started");
+    public void start() {
+        lifecycleLock.lock();
+        try {
+            if (started) {
+                throw new IllegalStateException("Moderation service has already been started");
+            }
+            started = true;
+            running.set(true);
+            worker.start();
+        } finally {
+            lifecycleLock.unlock();
         }
-        started = true;
-        running.set(true);
-        worker.start();
     }
 
     @Override
-    public synchronized void stop() {
-        running.set(false);
-        if (!started) {
-            return;
+    public void stop() {
+        lifecycleLock.lock();
+        try {
+            running.set(false);
+            if (!started) {
+                return;
+            }
+            worker.interrupt();
+        } finally {
+            lifecycleLock.unlock();
         }
-        worker.interrupt();
         try {
             worker.join(STOP_TIMEOUT);
         } catch (InterruptedException exception) {
@@ -103,7 +116,9 @@ final class KafkaModerationService implements ModerationService {
         try {
             producer.send(processor.outputFor(record)).get();
         } catch (ExecutionException exception) {
-            LOGGER.warn("Cannot publish moderation outcome for offset {}", record.offset(), exception.getCause());
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Cannot publish moderation outcome for offset {}", record.offset(), exception.getCause());
+            }
             consumer.seek(new TopicPartition(record.topic(), record.partition()), record.offset());
             Thread.sleep(POLL_INTERVAL);
             return;
@@ -113,7 +128,9 @@ final class KafkaModerationService implements ModerationService {
                 consumer.commitSync(COMMIT_TIMEOUT);
                 return;
             } catch (TimeoutException exception) {
-                LOGGER.warn("Cannot commit moderation offset {}", record.offset(), exception);
+                if (LOGGER.isWarnEnabled()) {
+                    LOGGER.warn("Cannot commit moderation offset {}", record.offset(), exception);
+                }
             }
         }
     }
